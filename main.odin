@@ -4,21 +4,20 @@ import "core:fmt"
 import "core:slice"
 import rl "vendor:raylib"
 
-V := [?]cstring{"A", "B", "C", "D", "E"}
-E := map[[2]uint]f32{
-    {/*A*/0, /*B*/1} =  4,
-    {/*A*/0, /*D*/3} =  5,
-    {/*B*/1, /*C*/2} =  1,
-    {/*B*/1, /*E*/4} =  6,
-    {/*C*/2, /*A*/0} =  2,
-    {/*C*/2, /*D*/3} =  3,
-    {/*D*/3, /*C*/2} =  1,
-    {/*D*/3, /*E*/4} =  2,
-    {/*E*/4, /*A*/0} =  1,
-    {/*E*/4, /*D*/3} =  4,
+add_edge :: proc(V: []cstring, E: ^map[[2]uint]f32, v1, v2: cstring, weight: f32) {
+    v1_pos, found_v1 := slice.linear_search(V, v1)
+    assert(found_v1)
+    v2_pos, found_v2 := slice.linear_search(V, v2)
+    assert(found_v2)
+    edge := [2]uint{uint(v1_pos), uint(v2_pos)}
+    E^[edge] = weight
 }
 
-FONTSIZE :: 50
+Cities := [?]cstring{"Quito", "St. Domingo", "Riobamba", "Azoguez", "Cuenca", "Machala", "Guayaquil"}
+V := [?]cstring{"Q", "S", "R", "A", "C", "M", "G"}
+E := map[[2]uint]f32{}
+
+FONTSIZE :: 40
 
 draw_text_centered :: proc(font: rl.Font, text: cstring, pos: rl.Vector2, fontsize: f32, color: rl.Color) {
     measure := rl.MeasureTextEx(font, text, fontsize, 0)
@@ -26,40 +25,39 @@ draw_text_centered :: proc(font: rl.Font, text: cstring, pos: rl.Vector2, fontsi
 }
 
 draw_vertex :: proc(font: rl.Font, pos: rl.Vector2, name: cstring, color: rl.Color) {
-    RADIUS :: 25
+    RADIUS :: FONTSIZE*.45
     rl.DrawCircleV(pos, RADIUS, color)
     draw_text_centered(font, name, pos, FONTSIZE, rl.WHITE)
 }
 
 draw_weight :: proc(font: rl.Font, pos: rl.Vector2, value, fontsize: f32, color: rl.Color) {
-    text := rl.TextFormat("%v", value)
+    text := rl.TextFormat("$%v", value) if value != 0.70 else "$0.7"
     draw_text_centered(font, text, pos, fontsize, color)
 }
 
-parametric_line :: #force_inline proc(A, B: rl.Vector2, $t: f32) -> rl.Vector2 where t >= 0 && t <=1 {
-    return rl.Vector2{
-        A.x + (B.x - A.x) * t,
-        A.y + (B.y - A.y) * t,
-    }
-}
-
-// Gives a point in the line perpendicular to the line formed by A and B, it passes through the midpoint between A and B.
-middlep :: proc(A, B: rl.Vector2, $t: f32) -> rl.Vector2 {
-    mid := (A + B) / 2
-    if B.y == A.y do return mid + {0, t}
-    mp := - (B.x - A.x) / (B.y - A.y)
-    return rl.Vector2{ mid.x + t, mid.y + mp * t }
-}
-
 main :: proc() {
-    rl.InitWindow(800, 600, "Algoritmo de Floyd-Warshall")
+    rl.SetConfigFlags({.WINDOW_RESIZABLE})
+    rl.InitWindow(800, 600, "Algoritmo de Floyd-Warshall aplicado a Redes de Transporte")
     rl.SetTargetFPS(60)
 
     font := rl.LoadFontEx("./assets/DMSerifText-Regular.ttf", FONTSIZE, nil, 0)
-    m := floyd_warshall_graph(len(V), E)
+
+    add_edge(V[:], &E, "Q", "S", 0.60)
+    add_edge(V[:], &E, "S", "G", 1.00)
+    add_edge(V[:], &E, "S", "R", 0.75)
+    add_edge(V[:], &E, "S", "M", 0.00)
+    add_edge(V[:], &E, "G", "M", 0.70)
+    add_edge(V[:], &E, "G", "R", 0.00)
+    add_edge(V[:], &E, "R", "A", 1.25)
+    add_edge(V[:], &E, "M", "A", 1.25)
+    add_edge(V[:], &E, "M", "C", 0.00)
+    add_edge(V[:], &E, "C", "A", 0.75)
+
+    m := floyd_warshall_graph(len(V), E, directed=false)
     solver := floyd_warshall_make(len(V), m)
 
     start, end: int = 0, 0
+    edge_points := map[[2]uint][2]rl.Vector2{}
 
     for !rl.WindowShouldClose() {
         time := rl.GetTime()
@@ -79,55 +77,51 @@ main :: proc() {
         }
 
         vertices := [?]rl.Vector2{
-            {sw * (.5 - .15), sh * (.5 - .25)}, // A
-            {sw * (.5 + .15), sh * (.5 - .25)}, // B
-            {sw * (.5 - .30), sh * (.5      )}, // C
-            {sw * (.5      ), sh * (.5 + .25)}, // D
-            {sw * (.5 + .30), sh * (.5      )}, // E
+            {sw * (.5 + .25), sh * (.5 - .45)}, // Q
+            {sw * (.5 + .15), sh * (.5 - .29)}, // S
+            {sw * (.5 + .25), sh * (.5 - .14)}, // R
+            {sw * (.5 + .20), sh * (.5 + .08)}, // A
+            {sw * (.5 + .15), sh * (.5 + .30)}, // C
+            {sw * (.5 - .25), sh * (.5 + .00)}, // M
+            {sw * (.5 - .15), sh * (.5 - .25)}, // G
         }
-        edge_points := map[[2]uint][]rl.Vector2{
-            {/*A*/0, /*B*/1} =  {vertices[0], vertices[1]},
-            {/*A*/0, /*D*/3} =  {vertices[0], vertices[3]},
-            {/*B*/1, /*C*/2} =  {vertices[1], vertices[2]},
-            {/*B*/1, /*E*/4} =  {vertices[1], vertices[4]},
-            {/*C*/2, /*A*/0} =  {vertices[2], vertices[0]},
-            {/*C*/2, /*D*/3} =  {vertices[2], vertices[3]},
-            {/*D*/3, /*C*/2} =  {vertices[3], vertices[3], middlep(vertices[3], vertices[2], -30), vertices[2] + {5, 30}, vertices[2] + {5, 30}},
-            {/*D*/3, /*E*/4} =  {vertices[3], vertices[4]},
-            {/*E*/4, /*A*/0} =  {vertices[4], vertices[0]},
-            {/*E*/4, /*D*/3} =  {vertices[4], vertices[4], middlep(vertices[4], vertices[3], 30), vertices[3] + {30, 0}, vertices[3] + {30, 0}},
+
+        for edge, weight in E {
+            edge_points[edge] = {vertices[edge.x], vertices[edge.y]}
         }
 
         rl.BeginDrawing()
         rl.ClearBackground(rl.WHITE)
 
         /* Top Header */ {
-            text := rl.TextFormat("Desde (%s) hasta (%s) el peso es %v", V[start], V[end], solver.dist[start][end])
-            draw_text_centered(font, text, {sw/2, sh*.10}, FONTSIZE, rl.BLACK)
+            text := rl.TextFormat("Desde %s hasta %s: $%v", Cities[start], Cities[end], solver.dist[start][end])
+            measure := rl.MeasureTextEx(font, text, FONTSIZE, 0)
+            draw_text_centered(font, text, {sw/2, sh - measure.y}, FONTSIZE, rl.BLACK)
         }
 
         for edge, points in edge_points {
-            _, found0 := slice.linear_search(solver.paths[start][end][:], edge[0])
-            _, found1 := slice.linear_search(solver.paths[start][end][:], edge[1])
-            is_in_path := found0 && found1 && edge[1] != uint(start) && edge[0] != uint(end)
+            is_in_path := false
+            for i in 0..<len(solver.paths[start][end])-1 {
+                e := [2]uint{
+                    solver.paths[start][end][i:i+2][0],
+                    solver.paths[start][end][i:i+2][1],
+                }
+                if e == edge || e == edge.yx {
+                    is_in_path = true
+                }
+            }
             color := rl.BLUE if is_in_path else rl.DARKGRAY
-            assert(len(points) == 2 || len(points) == 5)
-            if len(points) == 2 {
-                a, b := points[0], parametric_line(points[0], points[1], 0.85)
-                rl.DrawLineEx(a, b, 4 if is_in_path else 2, color)
-                rl.DrawCircleV(b, 8 if is_in_path else 4, color)
-                draw_weight(font, (a + b)/2, E[edge], FONTSIZE - (-10 if is_in_path else 15), color)
-            }
-            else if len(points) == 5 {
-                rl.DrawSplineCatmullRom(raw_data(points), cast(i32)len(points), 4 if is_in_path else 2, color)
-                rl.DrawCircleV(points[4], 8 if is_in_path else 4, color)
-                draw_weight(font, points[2], E[edge], FONTSIZE - (-10 if is_in_path else 15), color)
-            }
+
+            a, b := points[0], points[1]
+            rl.DrawLineEx(a, b, 4 if is_in_path else 2, color)
+            draw_weight(font, (a + b)/2, E[edge], FONTSIZE + (0 if is_in_path else -10), color)
         }
+
         for pos, i in vertices {
             _, found := slice.linear_search(solver.paths[start][end][:], uint(i))
             color: rl.Color = ---
             if i == start do color = rl.RED
+            else if i == end do color = rl.DARKGREEN
             else if found do color = rl.BLUE
             else do color = rl.DARKGRAY
             draw_vertex(font, pos, V[i], color)

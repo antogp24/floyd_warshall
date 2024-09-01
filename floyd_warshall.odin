@@ -60,12 +60,15 @@ floyd_warshall_default_graph :: proc($N: uint) -> (m: [N][N]f32) {
     return
 }
 
-floyd_warshall_graph :: proc($N: uint, E: map[[2]uint]f32) -> (m: [N][N]f32) {
+floyd_warshall_graph :: proc($N: uint, E: map[[2]uint]f32, directed := true) -> (m: [N][N]f32) {
     for i in 0..<N {
         for j in 0..<N {
             m[i][j] = INF if i != j else 0
         }
     }
-    for edge, weight in E do m[edge.x][edge.y] = weight
+    for edge, weight in E {
+        m[edge.x][edge.y] = weight
+        if !directed do m[edge.y][edge.x] = weight
+    }
     return
 }

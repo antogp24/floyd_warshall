@@ -45,7 +45,7 @@ floyd_warshall_make :: proc($N: uint, graph_matrix: [N][N]f32) -> (self: FloydWa
     return
 }
 
-get_path :: proc($N: uint, using self: ^FloydWarshall(N), V: []cstring, start: uint, end: uint) -> (path: [dynamic]cstring) {
+get_path :: proc(using self: ^FloydWarshall($N), V: []cstring, start: uint, end: uint) -> (path: [dynamic]cstring) {
     int_path := paths[start][end]
     for i in 0..<len(int_path) do append(&path, V[int_path[i]])
     return
